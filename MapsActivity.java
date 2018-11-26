@@ -1,0 +1,385 @@
+package emory.mealplan;
+
+import android.content.Intent;
+import android.os.Build;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.FragmentActivity;
+import android.os.Bundle;
+import android.support.v4.content.ContextCompat;
+import android.util.Log;
+import android.Manifest;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.location.Location;
+import android.location.LocationManager;
+import android.support.v4.app.ActivityCompat;
+import android.view.View;
+import android.widget.Button;
+import android.widget.Toast;
+// import android.location.LocationListener;
+
+import com.ashokvarma.bottomnavigation.BottomNavigationBar;
+import com.ashokvarma.bottomnavigation.BottomNavigationItem;
+import com.google.android.gms.location.LocationListener;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.UiSettings;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+
+import java.io.InputStream;
+import java.util.ArrayList;
+
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener,LocationListener, GoogleMap.OnMarkerClickListener {
+    private GoogleMap mMap;
+    private GoogleApiClient googleApiClient;
+    private LocationRequest locationRequest;
+    private Location lastLocation;
+    private Circle radcircle;
+    private LocationListener listener;
+    private Marker currentUserLocationMarker;
+    private static final int Request_User_Location_Code = 99;
+    private double latitide, longitude;
+    private int ProximityRadius = 10000;
+
+
+
+
+
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_maps);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+        {
+            checkUserLocationPermission();
+        }
+        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.map);
+        mapFragment.getMapAsync(this);
+
+        BottomNavigationBar bottomNavigationBar = (BottomNavigationBar) findViewById(R.id.bottom_navigation_bar);
+
+        bottomNavigationBar
+                .addItem(new BottomNavigationItem(R.drawable.ic_location, "Explore").setActiveColor("#1a237e").setInActiveColor("#ffffff"))
+                .addItem(new BottomNavigationItem(R.drawable.ic_list_black_24dp, "List").setActiveColor("#B00020").setInActiveColor("#ffffff"))
+                .addItem(new BottomNavigationItem(R.drawable.ic_deal, "Deals").setActiveColor("#1b5e20").setInActiveColor("#ffffff"))
+                .addItem(new BottomNavigationItem(R.drawable.ic_account, "Account").setActiveColor("#ff8f00").setInActiveColor("#ffffff"))
+                .setBackgroundStyle(BottomNavigationBar.BACKGROUND_STYLE_RIPPLE)
+                .setMode(BottomNavigationBar.MODE_FIXED)
+                .setFirstSelectedPosition(0)
+                .initialise();
+
+
+
+
+
+        Button infoButton;
+
+        infoButton= (Button) findViewById(R.id.viewinfo);
+        infoButton.setEnabled(true);
+
+        infoButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                openInfo();
+
+            }
+        });
+
+
+
+
+        bottomNavigationBar.setTabSelectedListener(new BottomNavigationBar.OnTabSelectedListener(){
+
+            @Override
+            public void onTabSelected(int position) {
+                if(position==0){
+
+                    startActivity(new Intent(MapsActivity.this,MapsActivity.class));
+
+
+
+                }
+
+                if(position==1){
+
+                    startActivity(new Intent(MapsActivity.this,AddReview.class));
+
+
+
+                }
+
+                if(position==2){
+
+                    startActivity(new Intent(MapsActivity.this,ViewDeals.class));
+
+
+                }
+
+                if(position==3){
+
+                    startActivity(new Intent(MapsActivity.this,SignIn.class));
+
+
+                }
+            }
+            @Override
+            public void onTabUnselected(int position) {
+            }
+            @Override
+            public void onTabReselected(int position) {
+
+                if(position==0){
+
+                    startActivity(new Intent(MapsActivity.this,MapsActivity.class));
+
+
+
+                }
+
+                if(position==1){
+
+                    startActivity(new Intent(MapsActivity.this,AddReview.class));
+
+
+
+                }
+
+                if(position==2){
+
+                    startActivity(new Intent(MapsActivity.this,ViewDeals.class));
+
+
+                }
+
+                if(position==3){
+
+                    startActivity(new Intent(MapsActivity.this,SignIn.class));
+
+
+                }
+
+
+            }
+        });
+
+
+
+
+
+    }
+
+
+    /**
+     * Manipulates the map once available.
+     * This callback is triggered when the map is ready to be used.
+     * This is where we can add markers or lines, add listeners or move the camera. In this case,
+     * we just add a marker near Sydney, Australia.
+     * If Google Play services is not installed on the device, the user will be prompted to install
+     * it inside the SupportMapFragment. This method will only be triggered once the user has
+     * installed Google Play services and returned to the app.
+     */
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        mMap = googleMap;
+        mMap.setOnMarkerClickListener(this);
+
+        UiSettings mapUI= mMap.getUiSettings();
+        mapUI.setZoomControlsEnabled(true);
+
+        ReadFirebase readFirebase = new ReadFirebase();
+        ArrayList<poi> poiList = readFirebase.result;
+
+        for(int i = 0; i < poiList.size(); i++){
+            poi current =poiList.get(i);
+
+            LatLng newMarker = new LatLng(current.getX(), current.getX());
+
+            MarkerOptions markerOptions = new MarkerOptions();
+            markerOptions.title(current.getPoiName());
+            markerOptions.position(newMarker);
+
+            mMap.addMarker(markerOptions);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+        {
+            buildGoogleApiClient();
+
+            mMap.setMyLocationEnabled(true);
+
+        }
+        //mMap.moveCamera(CameraUpdateFactory.newLatLng(lastLocation, 15);
+        //MarkerOptions markerOptions = new MarkerOptions();
+        LatLng emory = new LatLng(33.7925, -84.3240);
+        //markerOptions.position(emory);
+        //markerOptions.title("Emory University");
+        //markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
+        //mMap.addMarker(markerOptions);
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(emory,15));
+        //Circle circle = mMap.addCircle(new CircleOptions().center(emory).radius(1000).strokeColor(Color.BLACK).fillColor(Color.parseColor("#2271cce7")).strokeWidth(0));
+    }
+    public boolean onMarkerClick(Marker marker){
+        Location self=new Location("");
+        self.setLatitude(currentUserLocationMarker.getPosition().latitude);
+        self.setLongitude(currentUserLocationMarker.getPosition().longitude);
+        Location marked=new Location("");
+        marked.setLongitude((marker.getPosition().longitude));
+        marked.setLatitude((marker.getPosition().latitude));
+
+        float distance=self.distanceTo(marked);
+        marker.setSnippet("Distance from current location: "+distance+" meters");
+
+
+
+
+        return false;
+
+
+
+    }
+
+    public void openInfo(){
+        Intent intent = new Intent(this, RestaurantInfoNew.class);
+        startActivity(intent);
+
+
+    }
+    @Override
+    public void onLocationChanged(Location location) {
+        latitide = location.getLatitude();
+        longitude = location.getLongitude();
+
+        lastLocation = location;
+
+        if (currentUserLocationMarker != null)
+        {
+            currentUserLocationMarker.remove();
+        }
+
+        LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+
+        MarkerOptions markerOptions = new MarkerOptions();
+        markerOptions.position(latLng);
+        markerOptions.title("user Current Location");
+        markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
+
+        currentUserLocationMarker = mMap.addMarker(markerOptions);
+
+
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+
+        if(radcircle!=null){
+            radcircle.remove();
+
+        }
+        radcircle = mMap.addCircle(new CircleOptions().center(latLng).radius(1000).strokeColor(Color.BLACK).fillColor(Color.parseColor("#2271cce7")).strokeWidth(0));
+        if (googleApiClient == null)
+        {
+            LocationServices.FusedLocationApi.removeLocationUpdates(googleApiClient, this);
+        }
+
+    }
+    public boolean checkUserLocationPermission()
+    {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+        {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION))
+            {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, Request_User_Location_Code);
+            }
+            else
+            {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, Request_User_Location_Code);
+            }
+            return false;
+        }
+        else
+        {
+            return true;
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults)
+    {
+        switch (requestCode)
+        {
+            case Request_User_Location_Code:
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+                {
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+                    {
+                        if (googleApiClient == null)
+                        {
+                            buildGoogleApiClient();
+                        }
+                        mMap.setMyLocationEnabled(true);
+                    }
+                }
+                else
+                {
+                    Toast.makeText(this, "Permission Denied...", Toast.LENGTH_SHORT).show();
+                }
+                return;
+        }
+    }
+
+
+
+
+    protected synchronized void buildGoogleApiClient()
+    {
+        googleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(LocationServices.API)
+                .build();
+
+        googleApiClient.connect();
+    }
+
+
+    @Override
+    public void onConnected(@Nullable Bundle bundle)
+    {
+        locationRequest = new LocationRequest();
+        locationRequest.setInterval(11000);
+        locationRequest.setFastestInterval(1100);
+        locationRequest.setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY);
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+        {
+            LocationServices.FusedLocationApi.requestLocationUpdates(googleApiClient, locationRequest, this);
+        }
+
+
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+
+    }
+}
+
